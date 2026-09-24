@@ -5,6 +5,8 @@ import {
   db, 
   googleProvider, 
   signInWithPopup, 
+  signInWithRedirect,
+  getRedirectResult,
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
   updateProfile,
@@ -150,13 +152,63 @@ export const AppProvider = ({ children }) => {
     }
   }, [activeTrack]);
 
-  // Genuine Google OAuth Sign-In via Firebase signInWithPopup
+  // Handle Google Redirect Result (for Incognito & mobile users)
+  useEffect(() => {
+    if (!auth) return;
+    getRedirectResult(auth)
+      .then(async (result) => {
+        if (result && result.user) {
+          const firebaseUser = result.user;
+          try {
+            const userDocRef = doc(db, 'learners', firebaseUser.uid);
+            await setDoc(userDocRef, {
+              displayName: firebaseUser.displayName || 'Learner',
+              email: firebaseUser.email,
+              photoURL: firebaseUser.photoURL || '',
+              track: activeTrack,
+              lastLogin: serverTimestamp(),
+              updatedAt: new Date().toISOString()
+            }, { merge: true });
+          } catch (e) { }
+
+          setCurrentUser({
+            uid: firebaseUser.uid,
+            name: firebaseUser.displayName || (firebaseUser.email ? firebaseUser.email.split('@')[0] : 'Learner'),
+            email: firebaseUser.email,
+            avatar: firebaseUser.photoURL || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(firebaseUser.displayName || firebaseUser.email || 'Learner')}`,
+            track: activeTrack,
+            level: 'Level 01',
+            progressPercent: 20,
+            streakDays: 1,
+            projectsRemaining: 8,
+            xp: 150,
+            isFirebase: true
+          });
+          setIsGoogleModalOpen(false);
+        }
+      })
+      .catch((err) => {
+        console.warn('[Firebase Redirect Result notice]:', err);
+      });
+  }, [activeTrack]);
+
+  // Genuine Google OAuth Sign-In via Firebase signInWithPopup with Incognito timeout
   const loginWithGoogleFirebase = async () => {
     if (!auth) {
       return { success: false, error: 'Firebase Auth is not available. Please verify configuration.' };
     }
     try {
-      const result = await signInWithPopup(auth, googleProvider);
+      // Race popup with 12s timeout to prevent hanging when Chrome Incognito blocks third-party cookies or popups
+      const popupPromise = signInWithPopup(auth, googleProvider);
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => {
+          const timeoutErr = new Error('POPUP_TIMEOUT');
+          timeoutErr.code = 'auth/popup-timeout-incognito';
+          reject(timeoutErr);
+        }, 12000);
+      });
+
+      const result = await Promise.race([popupPromise, timeoutPromise]);
       const firebaseUser = result.user;
 
       // Sync user profile to Cloud Firestore
@@ -192,12 +244,32 @@ export const AppProvider = ({ children }) => {
       setIsGoogleModalOpen(false);
       return { success: true, user: userObj };
     } catch (error) {
-      console.error('[Firebase Google Auth Error]:', error);
+      console.warn('[Firebase Google Auth Notice]:', error);
+      if (error.code === 'auth/popup-timeout-incognito') {
+        return {
+          success: false,
+          code: 'auth/popup-timeout-incognito',
+          error: 'Connection timed out. In Chrome Incognito, third-party cookies or popups are blocked by default.'
+        };
+      }
       return { 
         success: false, 
         error: error.message, 
         code: error.code 
       };
+    }
+  };
+
+  // Google OAuth Sign-In via Redirect (100% works in Incognito without popup issues)
+  const loginWithGoogleRedirect = async () => {
+    if (!auth) {
+      return { success: false, error: 'Firebase Auth is not available. Please verify configuration.' };
+    }
+    try {
+      await signInWithRedirect(auth, googleProvider);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message, code: error.code };
     }
   };
 
@@ -344,6 +416,7 @@ export const AppProvider = ({ children }) => {
         authenticateAdmin,
         logoutAdmin,
         loginWithGoogleFirebase,
+        loginWithGoogleRedirect,
         loginWithEmailFirebase,
         registerWithEmailFirebase,
         logoutUser,

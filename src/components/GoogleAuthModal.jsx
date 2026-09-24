@@ -12,7 +12,8 @@ import {
   ShieldCheck, 
   Database,
   Loader2,
-  Sparkles
+  Sparkles,
+  Compass
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -21,6 +22,7 @@ export const GoogleAuthModal = () => {
     isGoogleModalOpen, 
     setIsGoogleModalOpen, 
     loginWithGoogleFirebase, 
+    loginWithGoogleRedirect,
     loginWithEmailFirebase, 
     registerWithEmailFirebase,
     startDemoTour 
@@ -60,16 +62,17 @@ export const GoogleAuthModal = () => {
       } else {
         if (res.code === 'auth/popup-closed-by-user') {
           setErrorMsg('Google sign-in popup was closed before completion. Please click again to sign in.');
+        } else if (res.code === 'auth/popup-timeout-incognito') {
+          setErrorMsg('Popup took too long or was suppressed. In Chrome Incognito, popups and third-party cookies are blocked by default. Please click "Redirect Mode" below to sign in without popups.');
+        } else if (res.code === 'auth/popup-blocked') {
+          setErrorMsg('Browser popup was blocked by Chrome Incognito. Please click "Redirect Mode" below to sign in.');
         } else if (res.code === 'auth/unauthorized-domain') {
           setUnauthDomain(true);
           setErrorMsg(`Firebase Authorized Domain required: "${window.location.hostname}" is not yet registered in Firebase Console.`);
         } else if (res.code === 'auth/operation-not-allowed' || res.code === 'auth/configuration-not-found') {
           setProviderNotEnabled(true);
           setErrorMsg('Google Sign-In Provider is not enabled yet in your Firebase Console.');
-        } else if (res.code === 'auth/popup-blocked') {
-          setErrorMsg('Popup was blocked by your browser. Please allow popups for this site and try again.');
         } else if (res.code === 'auth/cancelled-popup-request') {
-          // another popup was triggered, ignore or reset
           setErrorMsg('Popup request was refreshed.');
         } else {
           setErrorMsg(res.error || 'Authentication could not be completed.');
@@ -78,6 +81,32 @@ export const GoogleAuthModal = () => {
     } catch (err) {
       setLoading(false);
       setErrorMsg(err.message || 'An unexpected error occurred during Google sign-in.');
+    }
+  };
+
+  // 100% Incognito-compatible Google Sign-In via full tab Redirect
+  const handleGoogleRedirect = async () => {
+    setLoading(true);
+    setErrorMsg('');
+    setUnauthDomain(false);
+    setProviderNotEnabled(false);
+    try {
+      const res = await loginWithGoogleRedirect();
+      if (!res.success) {
+        setLoading(false);
+        if (res.code === 'auth/unauthorized-domain') {
+          setUnauthDomain(true);
+          setErrorMsg(`Firebase Authorized Domain required: "${window.location.hostname}" is not yet registered.`);
+        } else if (res.code === 'auth/operation-not-allowed') {
+          setProviderNotEnabled(true);
+          setErrorMsg('Google Provider is not enabled in Firebase Console.');
+        } else {
+          setErrorMsg(res.error || 'Could not initiate redirect.');
+        }
+      }
+    } catch (e) {
+      setLoading(false);
+      setErrorMsg(e.message || 'Redirect error.');
     }
   };
 
@@ -209,6 +238,32 @@ export const GoogleAuthModal = () => {
                     <span>Sign in with Google Account</span>
                   </>
                 )}
+              </button>
+
+              {loading && (
+                <div className="flex items-center justify-between text-xs text-slate-400 px-2 py-1.5 bg-slate-950/70 rounded-xl border border-slate-800 animate-fadeIn">
+                  <span className="flex items-center gap-1.5 text-[11px]">
+                    <Loader2 className="w-3 h-3 text-sky-400 animate-spin" />
+                    <span>If no popup appeared, check Incognito blocks</span>
+                  </span>
+                  <button 
+                    type="button" 
+                    onClick={() => setLoading(false)}
+                    className="text-rose-400 hover:text-rose-300 font-semibold underline cursor-pointer text-[11px]"
+                  >
+                    Cancel / Reset
+                  </button>
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={handleGoogleRedirect}
+                disabled={loading}
+                className="w-full bg-slate-950 hover:bg-slate-800 border border-slate-700/80 hover:border-sky-500/50 text-slate-200 font-medium py-2.5 px-3 rounded-xl text-xs transition flex items-center justify-center gap-2 cursor-pointer shadow active:scale-[0.99]"
+              >
+                <Compass className="w-3.5 h-3.5 text-sky-400" />
+                <span>Sign in with Google (Redirect — Best for Incognito)</span>
               </button>
 
               <div className="relative flex py-1 items-center">
