@@ -33,6 +33,7 @@ export const GoogleAuthModal = () => {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [unauthDomain, setUnauthDomain] = useState(false);
+  const [providerNotEnabled, setProviderNotEnabled] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
 
   if (!isGoogleModalOpen) return null;
@@ -42,6 +43,7 @@ export const GoogleAuthModal = () => {
     setLoading(true);
     setErrorMsg('');
     setUnauthDomain(false);
+    setProviderNotEnabled(false);
 
     try {
       const res = await loginWithGoogleFirebase();
@@ -61,6 +63,9 @@ export const GoogleAuthModal = () => {
         } else if (res.code === 'auth/unauthorized-domain') {
           setUnauthDomain(true);
           setErrorMsg(`Firebase Authorized Domain required: "${window.location.hostname}" is not yet registered in Firebase Console.`);
+        } else if (res.code === 'auth/operation-not-allowed' || res.code === 'auth/configuration-not-found') {
+          setProviderNotEnabled(true);
+          setErrorMsg('Google Sign-In Provider is not enabled yet in your Firebase Console.');
         } else if (res.code === 'auth/popup-blocked') {
           setErrorMsg('Popup was blocked by your browser. Please allow popups for this site and try again.');
         } else if (res.code === 'auth/cancelled-popup-request') {
@@ -157,6 +162,16 @@ export const GoogleAuthModal = () => {
                     <li>Open <a href="https://console.firebase.google.com/project/full-stack-universe-with-kapil/authentication/settings" target="_blank" rel="noreferrer" className="text-sky-300 underline font-mono">Firebase Console</a></li>
                     <li>Go to <strong>Authentication &gt; Settings &gt; Authorized domains</strong></li>
                     <li>Click <strong>Add domain</strong> and enter: <code className="bg-slate-800 text-amber-300 px-1 py-0.5 rounded">{window.location.hostname}</code></li>
+                  </ol>
+                </div>
+              )}
+              {providerNotEnabled && (
+                <div className="bg-slate-950/80 p-2.5 rounded-lg border border-slate-800 text-[11px] text-slate-300 space-y-1">
+                  <p className="font-semibold text-amber-400">How to enable Google Sign-In:</p>
+                  <ol className="list-decimal pl-4 space-y-0.5 text-slate-400">
+                    <li>Open <a href="https://console.firebase.google.com/project/full-stack-universe-with-kapil/authentication/providers" target="_blank" rel="noreferrer" className="text-sky-300 underline font-mono">Sign-in method settings</a></li>
+                    <li>Click on <strong>Google</strong></li>
+                    <li>Toggle the <strong>Enable</strong> switch, set your email, and click <strong>Save</strong></li>
                   </ol>
                 </div>
               )}
