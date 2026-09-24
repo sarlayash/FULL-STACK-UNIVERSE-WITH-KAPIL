@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { CAREER_DATA } from '../data/careerData';
 import { 
@@ -11,16 +11,21 @@ import {
   Sparkles, 
   QrCode, 
   ExternalLink,
-  ChevronDown,
-  ChevronUp
+  Download,
+  Image as ImageIcon,
+  Check
 } from 'lucide-react';
+import html2canvas from 'html2canvas';
 import confetti from 'canvas-confetti';
 
 export const CareerStudio = () => {
   const { currentUser, activeTrack, currentTrackData, certificates, generateCertificate } = useApp();
   const [activeTab, setActiveTab] = useState('readiness'); // 'readiness' | 'star' | 'companies' | 'certificate'
-  const [expandedStarIndex, setExpandedStarIndex] = useState(0);
   const [issuedCert, setIssuedCert] = useState(certificates[0] || null);
+  const [isDownloadingPng, setIsDownloadingPng] = useState(false);
+  const [downloadSuccess, setDownloadSuccess] = useState(false);
+
+  const certificateRef = useRef(null);
 
   const handleGenerateCertificate = () => {
     const cert = generateCertificate(currentUser ? currentUser.name : 'Alex Sharma', currentTrackData.title);
@@ -28,6 +33,144 @@ export const CareerStudio = () => {
     try {
       confetti({ particleCount: 100, spread: 100, origin: { y: 0.5 } });
     } catch (e) { }
+  };
+
+  // High-Resolution PNG Certificate Exporter
+  const handleDownloadPng = async () => {
+    if (!issuedCert) return;
+    setIsDownloadingPng(true);
+    setDownloadSuccess(false);
+
+    try {
+      if (certificateRef.current) {
+        const canvas = await html2canvas(certificateRef.current, {
+          scale: 2.5, // Ultra sharp high-DPI retina PNG
+          useCORS: true,
+          backgroundColor: '#090d16',
+          logging: false
+        });
+
+        const safeName = (issuedCert.studentName || 'Student').replace(/[^a-zA-Z0-9]/g, '_');
+        const imgData = canvas.toDataURL('image/png');
+        const link = document.createElement('a');
+        link.download = `Kapil_FullStack_Certificate_${safeName}_${issuedCert.id}.png`;
+        link.href = imgData;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        setDownloadSuccess(true);
+        try {
+          confetti({ particleCount: 70, spread: 80, origin: { y: 0.6 } });
+        } catch (e) { }
+        setTimeout(() => setDownloadSuccess(false), 3000);
+      } else {
+        downloadCanvasFallback();
+      }
+    } catch (error) {
+      console.warn('html2canvas capture notice, falling back to native high-res canvas renderer:', error);
+      downloadCanvasFallback();
+    } finally {
+      setIsDownloadingPng(false);
+    }
+  };
+
+  // Native HTML5 Canvas Fallback for 100% reliable offline PNG generation
+  const downloadCanvasFallback = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1600;
+    canvas.height = 1100;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Background gradient
+    const gradient = ctx.createLinearGradient(0, 0, 1600, 1100);
+    gradient.addColorStop(0, '#090d16');
+    gradient.addColorStop(0.5, '#020617');
+    gradient.addColorStop(1, '#090d16');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 1600, 1100);
+
+    // Double Gold/Amber Border
+    ctx.strokeStyle = '#f59e0b';
+    ctx.lineWidth = 12;
+    ctx.strokeRect(36, 36, 1528, 1028);
+    ctx.lineWidth = 3;
+    ctx.strokeRect(52, 52, 1496, 996);
+
+    // Header branding
+    ctx.fillStyle = '#38bdf8';
+    ctx.font = 'bold 22px monospace';
+    ctx.fillText('FULL STACK UNIVERSE · POWERED BY KAPIL', 80, 100);
+    
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#f59e0b';
+    ctx.fillText(`VERIFICATION ID: ${issuedCert.id}`, 1520, 100);
+
+    // Center Title
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#f59e0b';
+    ctx.font = 'bold 22px monospace';
+    ctx.fillText('OFFICIAL CERTIFICATE OF COMPLETION & INDUSTRY MASTERY', 800, 240);
+
+    // Student Name
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 64px serif';
+    ctx.fillText(issuedCert.studentName, 800, 350);
+
+    // Decorative line
+    ctx.strokeStyle = '#f59e0b';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(560, 390);
+    ctx.lineTo(1040, 390);
+    ctx.stroke();
+
+    // Body text
+    ctx.fillStyle = '#cbd5e1';
+    ctx.font = '24px sans-serif';
+    ctx.fillText('has successfully mastered the rigorous curriculum, built 4 production domain MVPs,', 800, 460);
+    ctx.fillText('and demonstrated placement readiness in:', 800, 500);
+
+    // Track Title
+    ctx.fillStyle = '#38bdf8';
+    ctx.font = 'bold 44px sans-serif';
+    ctx.fillText(issuedCert.track, 800, 580);
+
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '20px sans-serif';
+    ctx.fillText('Demonstrated proficiency in Architecture Design, Database Optimization, Asynchronous APIs,', 800, 650);
+    ctx.fillText('Dockerization, and Automated CI/CD Pipelines.', 800, 685);
+
+    // Footer items
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '20px monospace';
+    ctx.fillText(`Date of Award: ${issuedCert.issueDate}`, 90, 940);
+    ctx.fillStyle = '#10b981';
+    ctx.fillText(`Evaluation Score: ${issuedCert.score}`, 90, 980);
+
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#f59e0b';
+    ctx.font = 'italic bold 38px serif';
+    ctx.fillText('Kapil', 1510, 930);
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '20px monospace';
+    ctx.fillText('Kapil Sir · Lead Architect', 1510, 970);
+    ctx.fillStyle = '#64748b';
+    ctx.font = '16px monospace';
+    ctx.fillText('Full Stack Universe', 1510, 1000);
+
+    const safeName = (issuedCert.studentName || 'Student').replace(/[^a-zA-Z0-9]/g, '_');
+    const link = document.createElement('a');
+    link.download = `Kapil_FullStack_Certificate_${safeName}_${issuedCert.id}.png`;
+    link.href = canvas.toDataURL('image/png');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    setDownloadSuccess(true);
+    setTimeout(() => setDownloadSuccess(false), 3000);
   };
 
   return (
@@ -211,26 +354,54 @@ export const CareerStudio = () => {
       {/* View 4: Verifiable Certificate */}
       {activeTab === 'certificate' && (
         <div className="space-y-6">
-          <div className="flex justify-end gap-3">
+          <div className="flex flex-wrap justify-end gap-3">
             <button
               onClick={handleGenerateCertificate}
-              className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-4 py-2 rounded-xl text-xs shadow-lg shadow-emerald-600/20 transition flex items-center gap-1.5 cursor-pointer"
+              className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-4 py-2.5 rounded-xl text-xs shadow-lg shadow-emerald-600/20 transition flex items-center gap-1.5 cursor-pointer"
             >
               <Sparkles className="w-4 h-4" />
-              <span>Issue New Accredited Certificate</span>
+              <span>Issue New Certificate</span>
             </button>
+
+            {/* PNG Download Button (User Request) */}
+            <button
+              onClick={handleDownloadPng}
+              disabled={isDownloadingPng}
+              className="bg-amber-600 hover:bg-amber-500 text-white font-bold px-4 py-2.5 rounded-xl text-xs shadow-lg shadow-amber-600/20 transition flex items-center gap-2 cursor-pointer disabled:opacity-50"
+            >
+              {downloadSuccess ? (
+                <>
+                  <Check className="w-4 h-4 text-emerald-300" />
+                  <span>PNG Downloaded!</span>
+                </>
+              ) : isDownloadingPng ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>Rendering PNG...</span>
+                </>
+              ) : (
+                <>
+                  <Download className="w-4 h-4" />
+                  <span>Download Certificate (PNG)</span>
+                </>
+              )}
+            </button>
+
             <button
               onClick={() => window.print()}
-              className="bg-slate-800 hover:bg-slate-700 text-white font-semibold px-4 py-2 rounded-xl text-xs transition flex items-center gap-1.5 cursor-pointer"
+              className="bg-slate-800 hover:bg-slate-700 text-white font-semibold px-4 py-2.5 rounded-xl text-xs transition flex items-center gap-1.5 cursor-pointer"
             >
               <Printer className="w-4 h-4" />
-              <span>Print / Save PDF</span>
+              <span>Print / PDF</span>
             </button>
           </div>
 
-          {/* Certificate Canvas */}
+          {/* Certificate Canvas / Render Frame */}
           {issuedCert && (
-            <div className="relative bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 border-8 border-double border-amber-500/40 rounded-3xl p-8 sm:p-12 shadow-2xl text-center space-y-6 max-w-4xl mx-auto">
+            <div 
+              ref={certificateRef}
+              className="relative bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 border-8 border-double border-amber-500/50 rounded-3xl p-8 sm:p-12 shadow-2xl text-center space-y-6 max-w-4xl mx-auto"
+            >
               
               <div className="flex justify-between items-start text-left text-xs font-mono text-slate-500">
                 <div>
