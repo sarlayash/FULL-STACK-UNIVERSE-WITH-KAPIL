@@ -12,6 +12,8 @@ import { AssessmentArena } from './components/AssessmentArena';
 import { DeploymentHub } from './components/DeploymentHub';
 import { CareerStudio } from './components/CareerStudio';
 import { AdminConsole } from './components/AdminConsole';
+import { EnrollmentModal } from './components/EnrollmentModal';
+import { FinalAssessmentModal } from './components/FinalAssessmentModal';
 import { Sparkles, Heart, ShieldCheck, ArrowUpRight } from 'lucide-react';
 
 const MainLayout = () => {
@@ -36,6 +38,9 @@ const MainLayout = () => {
       <GoogleAuthModal />
       <AdminModal />
       <DemoTourModal />
+      <EnrollmentModal />
+      <FinalAssessmentModal />
+
 
       {/* Footer */}
       <footer className="bg-slate-950 border-t border-slate-900 mt-20 py-12 text-xs text-slate-400">

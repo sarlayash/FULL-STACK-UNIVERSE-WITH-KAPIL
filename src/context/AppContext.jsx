@@ -18,6 +18,11 @@ import {
   updateDoc,
   serverTimestamp
 } from '../firebase/config';
+import { 
+  FAANG_ENROLLMENT_MCQS, 
+  FAANG_CODING_CHALLENGES, 
+  FINAL_CAPSTONE_ASSESSMENT_MCQS 
+} from '../data/faangEnrollmentData';
 
 const AppContext = createContext(null);
 
@@ -66,7 +71,66 @@ export const AppProvider = ({ children }) => {
     return saved ? JSON.parse(saved) : [];
   });
 
+  // Enrollment Gatekeeper state (80% score required to unlock tracks)
+  const [enrollmentStatus, setEnrollmentStatus] = useState(() => {
+    const saved = localStorage.getItem('kapil_enrollment_status');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) {}
+    }
+    return {
+      isUnlocked: false,
+      score: 0,
+      totalPoints: 0,
+      javaScore: 0,
+      pythonScore: 0,
+      codingScore: 0,
+      totalQuestions: 60,
+      passed: false,
+      recommendedTrack: null,
+      completedAt: null,
+      testAnswers: {},
+      codingSubmissions: {}
+    };
+  });
+
+  // Final Assessment state (80% score required for Certificate)
+  const [finalAssessmentStatus, setFinalAssessmentStatus] = useState(() => {
+    const saved = localStorage.getItem('kapil_final_assessment_status');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) {}
+    }
+    return {
+      passed: false,
+      score: 0,
+      completedAt: null,
+      answers: {}
+    };
+  });
+
+  // Module completion progress (all 8 modules required for Certificate)
+  const [moduleProgress, setModuleProgress] = useState(() => {
+    const saved = localStorage.getItem('kapil_module_progress');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) {}
+    }
+    return {};
+  });
+
+  const [isEnrollmentModalOpen, setIsEnrollmentModalOpen] = useState(false);
+  const [isFinalAssessmentModalOpen, setIsFinalAssessmentModalOpen] = useState(false);
+
   // Sync state to localStorage
+  useEffect(() => {
+    localStorage.setItem('kapil_enrollment_status', JSON.stringify(enrollmentStatus));
+  }, [enrollmentStatus]);
+
+  useEffect(() => {
+    localStorage.setItem('kapil_final_assessment_status', JSON.stringify(finalAssessmentStatus));
+  }, [finalAssessmentStatus]);
+
+  useEffect(() => {
+    localStorage.setItem('kapil_module_progress', JSON.stringify(moduleProgress));
+  }, [moduleProgress]);
   useEffect(() => {
     localStorage.setItem('kapil_universe_track', activeTrack);
   }, [activeTrack]);
@@ -396,6 +460,138 @@ export const AppProvider = ({ children }) => {
     return newCert;
   };
 
+  // Gating access checks
+  const canAccessTracks = Boolean(enrollmentStatus.isUnlocked || isAdminLoggedIn);
+  const canAccessCertificate = Boolean(
+    (enrollmentStatus.isUnlocked && finalAssessmentStatus.passed && finalAssessmentStatus.score >= 80) || 
+    isAdminLoggedIn
+  );
+
+  // Submit FAANG Enrollment Test
+  const submitEnrollmentTest = (mcqAnswers, codingSubmissions) => {
+    let javaCorrect = 0;
+    let pythonCorrect = 0;
+    let generalCorrect = 0;
+
+    FAANG_ENROLLMENT_MCQS.forEach((q) => {
+      const selected = mcqAnswers[q.id];
+      if (selected !== undefined && selected === q.correctIndex) {
+        if (q.track === 'java') javaCorrect++;
+        else if (q.track === 'python') pythonCorrect++;
+        else generalCorrect++;
+      }
+    });
+
+    const totalMcqCorrect = javaCorrect + pythonCorrect + generalCorrect;
+    
+    // Evaluate coding challenges (each submitted coding problem with code length > 40 chars)
+    let codingPassedCount = 0;
+    FAANG_CODING_CHALLENGES.forEach((c) => {
+      const code = codingSubmissions[c.id];
+      if (code && code.trim().length > 40) {
+        codingPassedCount++;
+      }
+    });
+
+    const totalPoints = totalMcqCorrect + (codingPassedCount * 1); // 50 MCQs + 10 Coding = 60 Points
+    const percentage = Math.round((totalPoints / 60) * 100);
+    const isPassed = percentage >= 80;
+
+    // Intelligent Track Recommendation based on performance
+    let recommended = 'java';
+    if (pythonCorrect > javaCorrect) {
+      recommended = 'python';
+    } else if (javaCorrect > pythonCorrect) {
+      recommended = 'java';
+    } else {
+      recommended = activeTrack || 'java';
+    }
+
+    const newStatus = {
+      isUnlocked: isPassed,
+      score: percentage,
+      totalPoints,
+      javaScore: Math.round((javaCorrect / 25) * 100),
+      pythonScore: Math.round((pythonCorrect / 25) * 100),
+      codingScore: Math.round((codingPassedCount / 10) * 100),
+      passed: isPassed,
+      recommendedTrack: recommended,
+      completedAt: new Date().toISOString(),
+      testAnswers: mcqAnswers,
+      codingSubmissions: codingSubmissions
+    };
+
+    setEnrollmentStatus(newStatus);
+    if (isPassed) {
+      setActiveTrack(recommended);
+    }
+    return newStatus;
+  };
+
+  // Submit Comprehensive Final Assessment (to unlock certificate)
+  const submitFinalAssessment = (answers) => {
+    let correct = 0;
+    FINAL_CAPSTONE_ASSESSMENT_MCQS.forEach((q) => {
+      if (answers[q.id] !== undefined && answers[q.id] === q.correctIndex) {
+        correct++;
+      }
+    });
+
+    const percentage = Math.round((correct / FINAL_CAPSTONE_ASSESSMENT_MCQS.length) * 100);
+    const isPassed = percentage >= 80;
+
+    const newStatus = {
+      passed: isPassed,
+      score: percentage,
+      completedAt: new Date().toISOString(),
+      answers
+    };
+
+    setFinalAssessmentStatus(newStatus);
+    return newStatus;
+  };
+
+  const toggleModuleCompleted = (moduleId) => {
+    setModuleProgress(prev => ({
+      ...prev,
+      [moduleId]: !prev[moduleId]
+    }));
+  };
+
+  const adminBypassEnrollment = () => {
+    const bypassed = {
+      isUnlocked: true,
+      score: 100,
+      totalPoints: 60,
+      javaScore: 100,
+      pythonScore: 100,
+      codingScore: 100,
+      passed: true,
+      recommendedTrack: activeTrack,
+      completedAt: new Date().toISOString(),
+      bypassedByAdmin: true
+    };
+    setEnrollmentStatus(bypassed);
+  };
+
+  const resetEnrollmentTest = () => {
+    const reset = {
+      isUnlocked: false,
+      score: 0,
+      totalPoints: 0,
+      javaScore: 0,
+      pythonScore: 0,
+      codingScore: 0,
+      totalQuestions: 60,
+      passed: false,
+      recommendedTrack: null,
+      completedAt: null,
+      testAnswers: {},
+      codingSubmissions: {}
+    };
+    setEnrollmentStatus(reset);
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -428,7 +624,24 @@ export const AppProvider = ({ children }) => {
         recordQuizAnswer,
         certificates,
         generateCertificate,
-        currentTrackData: TRACKS_DATA[activeTrack]
+        currentTrackData: TRACKS_DATA[activeTrack],
+        // FAANG Enrollment & Gating
+        enrollmentStatus,
+        setEnrollmentStatus,
+        finalAssessmentStatus,
+        setFinalAssessmentStatus,
+        moduleProgress,
+        toggleModuleCompleted,
+        canAccessTracks,
+        canAccessCertificate,
+        isEnrollmentModalOpen,
+        setIsEnrollmentModalOpen,
+        isFinalAssessmentModalOpen,
+        setIsFinalAssessmentModalOpen,
+        submitEnrollmentTest,
+        submitFinalAssessment,
+        adminBypassEnrollment,
+        resetEnrollmentTest
       }}
     >
       {children}

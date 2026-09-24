@@ -16,11 +16,29 @@ import {
   ExternalLink,
   Code2,
   Cpu,
-  Database
+  Database,
+  Lock,
+  Unlock,
+  Zap,
+  ShieldCheck,
+  AlertTriangle
 } from 'lucide-react';
 
 export const DashboardView = () => {
-  const { currentUser, activeTrack, currentTrackData, setActiveTab, startDemoTour, setActiveTrack } = useApp();
+  const { 
+    currentUser, 
+    activeTrack, 
+    currentTrackData, 
+    setActiveTab, 
+    startDemoTour, 
+    setActiveTrack,
+    canAccessTracks,
+    enrollmentStatus,
+    setIsEnrollmentModalOpen,
+    adminBypassEnrollment,
+    isAdminLoggedIn
+  } = useApp();
+
 
   const learnerName = currentUser ? currentUser.name : 'Learner REAL NAME';
   const streak = currentUser ? currentUser.streakDays : 12;
@@ -194,6 +212,119 @@ export const DashboardView = () => {
           </div>
         </div>
       </div>
+
+
+      {/* FAANG Enrollment Status & Track Recommendation Banner */}
+      {!canAccessTracks ? (
+        <div className="bg-gradient-to-r from-amber-950/40 via-slate-900 to-orange-950/40 border-2 border-amber-500/40 rounded-3xl p-6 sm:p-8 shadow-2xl relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-80 h-80 bg-amber-500/10 rounded-full blur-3xl -z-10 pointer-events-none" />
+
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+            <div className="space-y-3 max-w-3xl">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold bg-amber-500/10 text-amber-300 border border-amber-500/30">
+                <Lock className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+                <span>FAANG ADMISSION GATE · 80% SCORE REQUIRED</span>
+              </div>
+
+              <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+                Java & Python Full Stack Tracks are Currently Gated
+              </h2>
+
+              <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                To guarantee true enterprise engineering mastery, all modules, code labs, MVPs, and deployment pipelines remain locked until you pass the <strong className="text-amber-300">FAANG-Standard Enrollment Assessment</strong> at <strong className="text-amber-300">80%+</strong>.
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 text-xs">
+                  <span className="text-amber-400 font-bold block">50 Hard FAANG MCQs</span>
+                  <span className="text-slate-400">25 Java (JVM/JMM) + 25 Python (GIL/Asyncio)</span>
+                </div>
+                <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 text-xs">
+                  <span className="text-amber-400 font-bold block">10 Hard Coding Challenges</span>
+                  <span className="text-slate-400">Rate Limiter, LRU TTL, Concurrent Queue</span>
+                </div>
+                <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 text-xs">
+                  <span className="text-amber-400 font-bold block">Adaptive Recommendation</span>
+                  <span className="text-slate-400">System recommends Java vs Python on sub-scores</span>
+                </div>
+              </div>
+
+              {enrollmentStatus?.score > 0 && !enrollmentStatus?.isUnlocked && (
+                <div className="p-3 rounded-xl bg-rose-950/40 border border-rose-500/30 text-xs text-rose-200 flex items-center justify-between flex-wrap gap-2">
+                  <span className="flex items-center gap-1.5 font-semibold">
+                    <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                    <span>Previous Score: <strong>{enrollmentStatus.score}%</strong> (Needed: 80%)</span>
+                  </span>
+                  <span className="text-slate-400 font-mono">
+                    Java: {enrollmentStatus.javaScore}% · Python: {enrollmentStatus.pythonScore}% · Coding: {enrollmentStatus.codingScore}%
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-3 w-full md:w-auto shrink-0">
+              <button
+                onClick={() => setIsEnrollmentModalOpen(true)}
+                className="px-6 py-3.5 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500 text-slate-950 font-black text-sm hover:brightness-110 shadow-xl shadow-amber-500/20 transition flex items-center justify-center space-x-2 cursor-pointer"
+              >
+                <Sparkles className="w-4 h-4" />
+                <span>{enrollmentStatus?.score > 0 ? 'Retake FAANG Exam' : 'Take Enrollment Exam (80% Cut-Off)'}</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+
+              {isAdminLoggedIn && (
+                <button
+                  onClick={adminBypassEnrollment}
+                  className="px-4 py-2 rounded-xl bg-indigo-950/80 border border-indigo-500/40 text-indigo-300 font-bold text-xs hover:bg-indigo-900 transition flex items-center justify-center space-x-1"
+                >
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <span>⚡ Kapil Admin: Master Bypass</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="bg-gradient-to-r from-emerald-950/30 via-slate-900 to-teal-950/30 border border-emerald-500/30 rounded-3xl p-6 shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div className="flex items-center space-x-4">
+            <div className="p-3 rounded-2xl bg-emerald-500/20 text-emerald-400">
+              <CheckCircle2 className="w-7 h-7" />
+            </div>
+            <div>
+              <div className="flex items-center space-x-2">
+                <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider">
+                  FAANG Verified Admission
+                </span>
+                <span className="px-2 py-0.5 rounded-full text-xs font-mono font-bold bg-emerald-500/10 text-emerald-300 border border-emerald-500/30">
+                  Score: {enrollmentStatus?.score}%
+                </span>
+              </div>
+              <h3 className="text-lg font-bold text-white mt-0.5">
+                Full Stack Universe Access Unlocked
+              </h3>
+              <p className="text-xs text-slate-300">
+                Kapil Intelligence Recommendation: <strong className="text-amber-300 capitalize">{enrollmentStatus?.recommendedTrack || 'Java'} Track</strong> based on your high algorithmic aptitude.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setActiveTrack(enrollmentStatus?.recommendedTrack || 'java')}
+              className="px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs shadow-md transition flex items-center space-x-1.5"
+            >
+              <span>Switch to Recommended ({enrollmentStatus?.recommendedTrack === 'python' ? 'Python' : 'Java'})</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => setIsEnrollmentModalOpen(true)}
+              className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs border border-slate-700 transition"
+            >
+              Review Exam Report
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Core Modules Grid */}
       <div>

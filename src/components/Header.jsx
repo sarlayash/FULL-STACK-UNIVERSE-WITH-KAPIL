@@ -14,7 +14,10 @@ import {
   Compass, 
   CheckCircle2, 
   LogOut, 
-  ExternalLink 
+  ExternalLink,
+  Lock,
+  Unlock,
+  AlertTriangle
 } from 'lucide-react';
 
 export const Header = () => {
@@ -29,18 +32,22 @@ export const Header = () => {
     isAdminLoggedIn, 
     logoutAdmin,
     activeTab, 
-    setActiveTab 
+    setActiveTab,
+    canAccessTracks,
+    enrollmentStatus,
+    setIsEnrollmentModalOpen
   } = useApp();
 
   const navItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: Compass },
-    { id: 'learning', label: 'Learning Studio', icon: BookOpen },
-    { id: 'ide', label: 'Code Studio (IDE)', icon: Terminal },
-    { id: 'mvps', label: 'Industry Lab (4 MVPs)', icon: Layers },
-    { id: 'assessments', label: 'Assessment Arena', icon: Award },
-    { id: 'deployment', label: 'Deployment Hub', icon: GitPullRequest },
-    { id: 'career', label: 'Career & Placement', icon: Briefcase },
+    { id: 'dashboard', label: 'Dashboard', icon: Compass, gated: false },
+    { id: 'learning', label: 'Learning Studio', icon: BookOpen, gated: true },
+    { id: 'ide', label: 'Code Studio (IDE)', icon: Terminal, gated: true },
+    { id: 'mvps', label: 'Industry Lab (4 MVPs)', icon: Layers, gated: true },
+    { id: 'assessments', label: 'Assessment Arena', icon: Award, gated: false },
+    { id: 'deployment', label: 'Deployment Hub', icon: GitPullRequest, gated: true },
+    { id: 'career', label: 'Career & Placement', icon: Briefcase, gated: false },
   ];
+
 
   return (
     <header className="sticky top-0 z-40 bg-slate-950/90 backdrop-blur-md border-b border-slate-800">
@@ -109,30 +116,76 @@ export const Header = () => {
           </div>
 
           {/* Track Switcher (Java Full Stack vs Python Full Stack) */}
-          <div className="hidden md:flex items-center bg-slate-900 p-1 rounded-lg border border-slate-800">
-            <button
-              onClick={() => setActiveTrack('java')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition ${
-                activeTrack === 'java'
-                  ? 'bg-sky-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <span className="w-2 h-2 rounded-full bg-orange-400 inline-block"></span>
-              Java Full Stack
-            </button>
-            <button
-              onClick={() => setActiveTrack('python')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition ${
-                activeTrack === 'python'
-                  ? 'bg-sky-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block"></span>
-              Python Full Stack
-            </button>
+          <div className="hidden md:flex items-center gap-2">
+            <div className="flex items-center bg-slate-900 p-1 rounded-lg border border-slate-800">
+              <button
+                onClick={() => {
+                  if (!canAccessTracks) {
+                    setIsEnrollmentModalOpen(true);
+                  } else {
+                    setActiveTrack('java');
+                  }
+                }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition ${
+                  activeTrack === 'java'
+                    ? 'bg-sky-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <span className="w-2 h-2 rounded-full bg-orange-400 inline-block"></span>
+                <span>Java Full Stack</span>
+                {!canAccessTracks ? (
+                  <Lock className="w-3 h-3 text-amber-400 ml-0.5" />
+                ) : enrollmentStatus?.recommendedTrack === 'java' ? (
+                  <span className="text-[10px] bg-amber-400/20 text-amber-300 px-1 py-0.2 rounded font-mono font-bold">
+                    Recommended
+                  </span>
+                ) : null}
+              </button>
+
+              <button
+                onClick={() => {
+                  if (!canAccessTracks) {
+                    setIsEnrollmentModalOpen(true);
+                  } else {
+                    setActiveTrack('python');
+                  }
+                }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition ${
+                  activeTrack === 'python'
+                    ? 'bg-sky-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block"></span>
+                <span>Python Full Stack</span>
+                {!canAccessTracks ? (
+                  <Lock className="w-3 h-3 text-amber-400 ml-0.5" />
+                ) : enrollmentStatus?.recommendedTrack === 'python' ? (
+                  <span className="text-[10px] bg-amber-400/20 text-amber-300 px-1 py-0.2 rounded font-mono font-bold">
+                    Recommended
+                  </span>
+                ) : null}
+              </button>
+            </div>
+
+            {/* Enrollment Test Launcher CTA */}
+            {!canAccessTracks ? (
+              <button
+                onClick={() => setIsEnrollmentModalOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 font-bold text-xs shadow-md shadow-amber-500/20 hover:brightness-110 transition animate-pulse"
+              >
+                <Lock className="w-3.5 h-3.5" />
+                <span>Unlock Tracks (80% FAANG Exam)</span>
+              </button>
+            ) : (
+              <div className="hidden xl:flex items-center gap-1 text-[11px] font-mono text-emerald-400 bg-emerald-950/40 border border-emerald-500/30 px-2 py-1 rounded-md">
+                <CheckCircle2 className="w-3 h-3" />
+                <span>Enrolled ({enrollmentStatus?.score}%)</span>
+              </div>
+            )}
           </div>
+
 
           {/* User Profile / Google Sign-In & Tour */}
           <div className="flex items-center gap-3">
@@ -206,10 +259,18 @@ export const Header = () => {
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
+            const isGated = item.gated && !canAccessTracks;
+
             return (
               <button
                 key={item.id}
-                onClick={() => setActiveTab(item.id)}
+                onClick={() => {
+                  if (isGated) {
+                    setIsEnrollmentModalOpen(true);
+                  } else {
+                    setActiveTab(item.id);
+                  }
+                }}
                 className={`flex items-center gap-2 px-4 py-3 text-xs font-medium whitespace-nowrap border-b-2 transition ${
                   isActive
                     ? 'border-sky-500 text-sky-400 bg-sky-500/10'
@@ -217,7 +278,13 @@ export const Header = () => {
                 }`}
               >
                 <Icon className={`w-4 h-4 ${isActive ? 'text-sky-400' : 'text-slate-500'}`} />
-                {item.label}
+                <span>{item.label}</span>
+                {isGated && (
+                  <span className="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                    <Lock className="w-2.5 h-2.5" />
+                    <span>80%</span>
+                  </span>
+                )}
               </button>
             );
           })}
