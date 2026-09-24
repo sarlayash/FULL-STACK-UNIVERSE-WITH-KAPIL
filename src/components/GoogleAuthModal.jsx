@@ -52,6 +52,10 @@ export const GoogleAuthModal = () => {
       setLoading(false);
 
       if (res.success) {
+        if (res.redirected) {
+          setSuccessMsg('Redirecting to Google Account Sign-In...');
+          return;
+        }
         setSuccessMsg(`Welcome, ${res.user?.name || 'Learner'}! Authenticated via Google.`);
         try {
           confetti({ particleCount: 80, spread: 80, origin: { y: 0.6 } });
@@ -62,10 +66,6 @@ export const GoogleAuthModal = () => {
       } else {
         if (res.code === 'auth/popup-closed-by-user') {
           setErrorMsg('Google sign-in popup was closed before completion. Please click again to sign in.');
-        } else if (res.code === 'auth/popup-timeout-incognito') {
-          setErrorMsg('Popup took too long or was suppressed. In Chrome Incognito, popups and third-party cookies are blocked by default. Please click "Redirect Mode" below to sign in without popups.');
-        } else if (res.code === 'auth/popup-blocked') {
-          setErrorMsg('Browser popup was blocked by Chrome Incognito. Please click "Redirect Mode" below to sign in.');
         } else if (res.code === 'auth/unauthorized-domain') {
           setUnauthDomain(true);
           setErrorMsg(`Firebase Authorized Domain required: "${window.location.hostname}" is not yet registered in Firebase Console.`);

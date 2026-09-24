@@ -89,58 +89,52 @@ export const AppProvider = ({ children }) => {
     try {
       const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
         if (firebaseUser) {
+          // Immediately set user without blocking for Firestore
+          const baseUser = {
+            uid: firebaseUser.uid,
+            name: firebaseUser.displayName || (firebaseUser.email ? firebaseUser.email.split('@')[0] : 'Learner'),
+            email: firebaseUser.email,
+            avatar: firebaseUser.photoURL || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(firebaseUser.displayName || firebaseUser.email || 'Learner')}`,
+            track: activeTrack,
+            level: 'Level 01',
+            progressPercent: 20,
+            streakDays: 1,
+            projectsRemaining: 8,
+            xp: 150,
+            isFirebase: true
+          };
+          setCurrentUser(baseUser);
+
+          // Asynchronously sync and enrich from Cloud Firestore in the background
           try {
             const userDocRef = doc(db, 'learners', firebaseUser.uid);
-            const userSnap = await getDoc(userDocRef);
-
-            if (userSnap.exists()) {
-              const data = userSnap.data();
-              setCurrentUser({
-                uid: firebaseUser.uid,
-                name: data.displayName || firebaseUser.displayName || 'Learner',
-                email: firebaseUser.email,
-                avatar: firebaseUser.photoURL || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(firebaseUser.displayName || 'Learner')}`,
-                track: data.track || activeTrack,
-                level: data.level || 'Level 01',
-                progressPercent: data.progressPercent || 15,
-                streakDays: data.streakDays || 1,
-                projectsRemaining: data.projectsRemaining !== undefined ? data.projectsRemaining : 8,
-                xp: data.xp || 100,
-                isFirebase: true
-              });
-              if (data.track) setActiveTrack(data.track);
-              if (data.completedQuizzes) setCompletedQuizzes(data.completedQuizzes);
-            } else {
-              const initialUserData = {
-                displayName: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Learner',
-                email: firebaseUser.email,
-                track: activeTrack,
-                level: 'Level 01',
-                progressPercent: 10,
-                streakDays: 1,
-                projectsRemaining: 8,
-                xp: 100,
-                completedQuizzes: {},
-                createdAt: new Date().toISOString()
-              };
-              try {
-                await setDoc(userDocRef, initialUserData);
-              } catch (e) { }
-
-              setCurrentUser({
-                uid: firebaseUser.uid,
-                name: initialUserData.displayName,
-                email: firebaseUser.email,
-                avatar: firebaseUser.photoURL || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(initialUserData.displayName)}`,
-                track: activeTrack,
-                level: 'Level 01',
-                progressPercent: 10,
-                streakDays: 1,
-                projectsRemaining: 8,
-                xp: 100,
-                isFirebase: true
-              });
-            }
+            getDoc(userDocRef).then((userSnap) => {
+              if (userSnap.exists()) {
+                const data = userSnap.data();
+                setCurrentUser(prev => ({
+                  ...prev,
+                  name: data.displayName || prev.name,
+                  track: data.track || prev.track,
+                  level: data.level || prev.level,
+                  progressPercent: data.progressPercent || prev.progressPercent,
+                  xp: data.xp || prev.xp
+                }));
+                if (data.track) setActiveTrack(data.track);
+                if (data.completedQuizzes) setCompletedQuizzes(data.completedQuizzes);
+              } else {
+                setDoc(userDocRef, {
+                  displayName: baseUser.name,
+                  email: baseUser.email,
+                  track: activeTrack,
+                  level: 'Level 01',
+                  progressPercent: 20,
+                  streakDays: 1,
+                  projectsRemaining: 8,
+                  xp: 150,
+                  createdAt: serverTimestamp()
+                }, { merge: true }).catch(() => {});
+              }
+            }).catch(() => {});
           } catch (e) {
             console.warn('[Firestore] Sync warning:', e);
           }
@@ -156,22 +150,10 @@ export const AppProvider = ({ children }) => {
   useEffect(() => {
     if (!auth) return;
     getRedirectResult(auth)
-      .then(async (result) => {
+      .then((result) => {
         if (result && result.user) {
           const firebaseUser = result.user;
-          try {
-            const userDocRef = doc(db, 'learners', firebaseUser.uid);
-            await setDoc(userDocRef, {
-              displayName: firebaseUser.displayName || 'Learner',
-              email: firebaseUser.email,
-              photoURL: firebaseUser.photoURL || '',
-              track: activeTrack,
-              lastLogin: serverTimestamp(),
-              updatedAt: new Date().toISOString()
-            }, { merge: true });
-          } catch (e) { }
-
-          setCurrentUser({
+          const userObj = {
             uid: firebaseUser.uid,
             name: firebaseUser.displayName || (firebaseUser.email ? firebaseUser.email.split('@')[0] : 'Learner'),
             email: firebaseUser.email,
@@ -183,8 +165,23 @@ export const AppProvider = ({ children }) => {
             projectsRemaining: 8,
             xp: 150,
             isFirebase: true
-          });
+          };
+
+          setCurrentUser(userObj);
           setIsGoogleModalOpen(false);
+
+          // Background firestore sync
+          try {
+            const userDocRef = doc(db, 'learners', firebaseUser.uid);
+            setDoc(userDocRef, {
+              displayName: userObj.name,
+              email: userObj.email,
+              photoURL: userObj.avatar,
+              track: activeTrack,
+              lastLogin: serverTimestamp(),
+              updatedAt: new Date().toISOString()
+            }, { merge: true }).catch(() => {});
+          } catch (e) { }
         }
       })
       .catch((err) => {
@@ -192,39 +189,26 @@ export const AppProvider = ({ children }) => {
       });
   }, [activeTrack]);
 
-  // Genuine Google OAuth Sign-In via Firebase signInWithPopup with Incognito timeout
+  // Genuine Google OAuth Sign-In via Firebase signInWithPopup with automatic Redirect fallback
   const loginWithGoogleFirebase = async () => {
     if (!auth) {
       return { success: false, error: 'Firebase Auth is not available. Please verify configuration.' };
     }
     try {
-      // Race popup with 12s timeout to prevent hanging when Chrome Incognito blocks third-party cookies or popups
-      const popupPromise = signInWithPopup(auth, googleProvider);
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => {
-          const timeoutErr = new Error('POPUP_TIMEOUT');
-          timeoutErr.code = 'auth/popup-timeout-incognito';
-          reject(timeoutErr);
-        }, 12000);
-      });
-
-      const result = await Promise.race([popupPromise, timeoutPromise]);
-      const firebaseUser = result.user;
-
-      // Sync user profile to Cloud Firestore
+      let result;
       try {
-        const userDocRef = doc(db, 'learners', firebaseUser.uid);
-        await setDoc(userDocRef, {
-          displayName: firebaseUser.displayName || 'Learner',
-          email: firebaseUser.email,
-          photoURL: firebaseUser.photoURL || '',
-          track: activeTrack,
-          lastLogin: serverTimestamp(),
-          updatedAt: new Date().toISOString()
-        }, { merge: true });
-      } catch (firestoreErr) {
-        console.warn('[Firestore] Sync notice:', firestoreErr);
+        result = await signInWithPopup(auth, googleProvider);
+      } catch (popupErr) {
+        // If popup was blocked by browser or Incognito policy, seamlessly switch to redirect
+        if (popupErr.code === 'auth/popup-blocked' || popupErr.code === 'auth/cancelled-popup-request') {
+          console.warn('[Firebase Auth] Popup blocked by browser, automatically falling back to redirect mode...');
+          await signInWithRedirect(auth, googleProvider);
+          return { success: true, redirected: true };
+        }
+        throw popupErr;
       }
+
+      const firebaseUser = result.user;
 
       const userObj = {
         uid: firebaseUser.uid,
@@ -240,18 +224,26 @@ export const AppProvider = ({ children }) => {
         isFirebase: true
       };
 
+      // Set user immediately for 0-latency UI response
       setCurrentUser(userObj);
       setIsGoogleModalOpen(false);
+
+      // Background sync to Cloud Firestore
+      try {
+        const userDocRef = doc(db, 'learners', firebaseUser.uid);
+        setDoc(userDocRef, {
+          displayName: userObj.name,
+          email: userObj.email,
+          photoURL: userObj.avatar,
+          track: activeTrack,
+          lastLogin: serverTimestamp(),
+          updatedAt: new Date().toISOString()
+        }, { merge: true }).catch(() => {});
+      } catch (firestoreErr) { }
+
       return { success: true, user: userObj };
     } catch (error) {
       console.warn('[Firebase Google Auth Notice]:', error);
-      if (error.code === 'auth/popup-timeout-incognito') {
-        return {
-          success: false,
-          code: 'auth/popup-timeout-incognito',
-          error: 'Connection timed out. In Chrome Incognito, third-party cookies or popups are blocked by default.'
-        };
-      }
       return { 
         success: false, 
         error: error.message, 
