@@ -154,7 +154,7 @@ export const GoogleAuthModal = () => {
                 <div className="bg-slate-950/80 p-2.5 rounded-lg border border-slate-800 text-[11px] text-slate-300 space-y-1">
                   <p className="font-semibold text-sky-400">How to authorize this domain:</p>
                   <ol className="list-decimal pl-4 space-y-0.5 text-slate-400">
-                    <li>Open <a href="https://console.firebase.google.com/project/java-dsa-iq-day7/authentication/settings" target="_blank" rel="noreferrer" className="text-sky-300 underline font-mono">Firebase Console</a></li>
+                    <li>Open <a href="https://console.firebase.google.com/project/full-stack-universe-with-kapil/authentication/settings" target="_blank" rel="noreferrer" className="text-sky-300 underline font-mono">Firebase Console</a></li>
                     <li>Go to <strong>Authentication &gt; Settings &gt; Authorized domains</strong></li>
                     <li>Click <strong>Add domain</strong> and enter: <code className="bg-slate-800 text-amber-300 px-1 py-0.5 rounded">{window.location.hostname}</code></li>
                   </ol>
