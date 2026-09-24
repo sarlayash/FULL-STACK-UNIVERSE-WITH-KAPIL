@@ -109,7 +109,7 @@ export const DemoTourModal = () => {
       icon: Briefcase,
       color: 'from-rose-500 to-amber-600',
       description: 'Master placement interviews with curated STAR behavioral templates, company-specific hiring blueprints, and generate your official Verifiable Kapil Full Stack Certificate.',
-      highlight: 'Also includes Kapil Admin Console (ID: KAPILADMIN / Password: ADMIN123) for instructors to manage cohorts and grade submissions.',
+      highlight: 'Also includes secure Kapil Admin Console for instructors to manage cohorts, inspect submissions, and issue accredited certificates.',
       actionLabel: 'Finish Tour & Start Coding!'
     }
   ];

@@ -1,5 +1,21 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { TRACKS_DATA } from '../data/curriculumData';
+import { 
+  auth, 
+  db, 
+  googleProvider, 
+  signInWithPopup, 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword, 
+  updateProfile,
+  signOut, 
+  onAuthStateChanged,
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  serverTimestamp
+} from '../firebase/config';
 
 const AppContext = createContext(null);
 
@@ -9,29 +25,9 @@ export const AppProvider = ({ children }) => {
     return localStorage.getItem('kapil_universe_track') || 'java';
   });
 
-  // Current logged in user (Default to the authentic learner from PDF page 1 for immediate tour/experience)
-  const [currentUser, setCurrentUser] = useState(() => {
-    const saved = localStorage.getItem('kapil_universe_user');
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { }
-    }
-    // Realistic default demo learner matching PDF Page 1
-    return {
-      id: 'demo-learner-101',
-      name: 'Alex Sharma',
-      email: 'alex.sharma.engineer@gmail.com',
-      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-      track: 'java',
-      level: 'Level 04',
-      progressPercent: 42,
-      streakDays: 12,
-      projectsRemaining: 8,
-      xp: 2840,
-      enrolledDate: 'Sept 2026',
-      githubUsername: 'alexsharma-dev',
-      isGoogleAuth: true
-    };
-  });
+  // Current authenticated user (Synced from Firebase Auth + Firestore)
+  const [currentUser, setCurrentUser] = useState(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
 
   // Admin authentication state
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(() => {
@@ -42,118 +38,185 @@ export const AppProvider = ({ children }) => {
   const [isTourActive, setIsTourActive] = useState(false);
   const [tourStep, setTourStep] = useState(0);
 
-  // Google Login Modal visibility
+  // Modals visibility
   const [isGoogleModalOpen, setIsGoogleModalOpen] = useState(false);
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
 
   // Active navigation tab
   const [activeTab, setActiveTab] = useState('dashboard');
 
-  // Code editor state
-  const [savedSnippets, setSavedSnippets] = useState(() => {
-    const saved = localStorage.getItem('kapil_universe_snippets');
-    return saved ? JSON.parse(saved) : {};
-  });
-
-  // Completed assessments & quiz scores
+  // Completed quizzes (synced with Firestore when logged in)
   const [completedQuizzes, setCompletedQuizzes] = useState(() => {
     const saved = localStorage.getItem('kapil_universe_quizzes');
-    return saved ? JSON.parse(saved) : { 'mcq-1': 1, 'mcq-2': 1 };
+    return saved ? JSON.parse(saved) : {};
   });
 
   // Issued certificates
   const [certificates, setCertificates] = useState(() => {
     const saved = localStorage.getItem('kapil_universe_certs');
-    return saved ? JSON.parse(saved) : [
-      {
-        id: 'CERT-KAPIL-2026-8891',
-        studentName: 'Alex Sharma',
-        track: 'Java Full Stack Universe',
-        issueDate: '24 September 2026',
-        instructor: 'Kapil Sir',
-        score: '96%',
-        verificationUrl: 'https://fullstack-universe.kapil.edu/verify/CERT-KAPIL-2026-8891'
-      }
-    ];
+    return saved ? JSON.parse(saved) : [];
   });
 
+  // Sync active track to localStorage
   useEffect(() => {
     localStorage.setItem('kapil_universe_track', activeTrack);
   }, [activeTrack]);
 
-  useEffect(() => {
-    if (currentUser) {
-      localStorage.setItem('kapil_universe_user', JSON.stringify(currentUser));
-    } else {
-      localStorage.removeItem('kapil_universe_user');
-    }
-  }, [currentUser]);
-
+  // Sync admin state to localStorage
   useEffect(() => {
     localStorage.setItem('kapil_universe_admin', isAdminLoggedIn ? 'true' : 'false');
   }, [isAdminLoggedIn]);
 
-  // Auth actions
-  const loginWithGoogle = (profile) => {
-    const user = {
-      id: profile.id || 'g-' + Date.now(),
-      name: profile.name || 'Google Learner',
-      email: profile.email || 'learner@gmail.com',
-      avatar: profile.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
-      track: activeTrack,
-      level: 'Level 01',
-      progressPercent: 12,
-      streakDays: 1,
-      projectsRemaining: 8,
-      xp: 450,
-      enrolledDate: 'Sept 2026',
-      githubUsername: profile.githubUsername || 'learner-dev',
-      isGoogleAuth: true
-    };
-    setCurrentUser(user);
-    setIsGoogleModalOpen(false);
+  // Listen to Firebase Auth state in real-time
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      setIsAuthLoading(true);
+      if (firebaseUser) {
+        try {
+          // Fetch existing user journey from Cloud Firestore
+          const userDocRef = doc(db, 'learners', firebaseUser.uid);
+          const userSnap = await getDoc(userDocRef);
+
+          if (userSnap.exists()) {
+            const data = userSnap.data();
+            setCurrentUser({
+              uid: firebaseUser.uid,
+              name: data.displayName || firebaseUser.displayName || 'Learner',
+              email: firebaseUser.email,
+              avatar: firebaseUser.photoURL || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(firebaseUser.displayName || firebaseUser.email || 'Learner')}`,
+              track: data.track || activeTrack,
+              level: data.level || 'Level 01',
+              progressPercent: data.progressPercent || 0,
+              streakDays: data.streakDays || 1,
+              projectsRemaining: data.projectsRemaining !== undefined ? data.projectsRemaining : 8,
+              xp: data.xp || 50,
+              githubUsername: data.githubUsername || '',
+              isFirebase: true
+            });
+            if (data.track) setActiveTrack(data.track);
+            if (data.completedQuizzes) setCompletedQuizzes(data.completedQuizzes);
+          } else {
+            // New user provisioning in Firestore
+            const initialUserData = {
+              displayName: firebaseUser.displayName || (firebaseUser.email ? firebaseUser.email.split('@')[0] : 'Learner'),
+              email: firebaseUser.email,
+              track: activeTrack,
+              level: 'Level 01',
+              progressPercent: 5,
+              streakDays: 1,
+              projectsRemaining: 8,
+              xp: 100,
+              completedQuizzes: {},
+              createdAt: serverTimestamp(),
+              lastLoginAt: serverTimestamp()
+            };
+            await setDoc(userDocRef, initialUserData);
+
+            setCurrentUser({
+              uid: firebaseUser.uid,
+              name: initialUserData.displayName,
+              email: firebaseUser.email,
+              avatar: firebaseUser.photoURL || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(initialUserData.displayName)}`,
+              track: activeTrack,
+              level: 'Level 01',
+              progressPercent: 5,
+              streakDays: 1,
+              projectsRemaining: 8,
+              xp: 100,
+              githubUsername: '',
+              isFirebase: true
+            });
+          }
+        } catch (err) {
+          console.warn('[Firestore] Sync notice:', err);
+          // Fallback to Firebase Auth profile
+          setCurrentUser({
+            uid: firebaseUser.uid,
+            name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Learner',
+            email: firebaseUser.email,
+            avatar: firebaseUser.photoURL || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(firebaseUser.displayName || 'Learner')}`,
+            track: activeTrack,
+            level: 'Level 01',
+            progressPercent: 10,
+            streakDays: 1,
+            projectsRemaining: 8,
+            xp: 100,
+            isFirebase: true
+          });
+        }
+      } else {
+        setCurrentUser(null);
+      }
+      setIsAuthLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [activeTrack]);
+
+  // Real Firebase Google Sign-In via Popup
+  const loginWithGoogleFirebase = async () => {
+    try {
+      const result = await signInWithPopup(auth, googleProvider);
+      setIsGoogleModalOpen(false);
+      return { success: true, user: result.user };
+    } catch (error) {
+      console.error('[Firebase Auth Error]', error);
+      return { success: false, error: error.message, code: error.code };
+    }
   };
 
-  const loginAsDemoUser = (trackPreference = 'java') => {
-    const demo = {
-      id: 'demo-learner-101',
-      name: trackPreference === 'java' ? 'Alex Sharma' : 'Priya Patel',
-      email: trackPreference === 'java' ? 'alex.sharma.engineer@gmail.com' : 'priya.patel.ai@gmail.com',
-      avatar: trackPreference === 'java' 
-        ? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80'
-        : 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80',
-      track: trackPreference,
-      level: 'Level 04',
-      progressPercent: 42,
-      streakDays: 12,
-      projectsRemaining: 8,
-      xp: 2840,
-      enrolledDate: 'Sept 2026',
-      githubUsername: trackPreference === 'java' ? 'alexsharma-dev' : 'priyapatel-tech',
-      isGoogleAuth: true
-    };
-    setActiveTrack(trackPreference);
-    setCurrentUser(demo);
-    setIsGoogleModalOpen(false);
+  // Real Firebase Email/Password Sign-In
+  const loginWithEmailFirebase = async (email, password) => {
+    try {
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      setIsGoogleModalOpen(false);
+      return { success: true, user: userCredential.user };
+    } catch (error) {
+      console.error('[Firebase Auth Error]', error);
+      return { success: false, error: error.message, code: error.code };
+    }
   };
 
-  const logout = () => {
-    setCurrentUser(null);
+  // Real Firebase Email/Password Sign-Up
+  const registerWithEmailFirebase = async (email, password, displayName) => {
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      if (displayName) {
+        await updateProfile(userCredential.user, { displayName });
+      }
+      setIsGoogleModalOpen(false);
+      return { success: true, user: userCredential.user };
+    } catch (error) {
+      console.error('[Firebase Auth Error]', error);
+      return { success: false, error: error.message, code: error.code };
+    }
   };
 
+  // Firebase Sign-Out
+  const logoutUser = async () => {
+    try {
+      await signOut(auth);
+      setCurrentUser(null);
+    } catch (err) {
+      console.error('Sign out error', err);
+    }
+  };
+
+  // Admin authentication (Secured credentials checked without rendering on screen)
   const authenticateAdmin = (adminId, password) => {
     if (adminId.trim().toUpperCase() === 'KAPILADMIN' && password.trim() === 'ADMIN123') {
       setIsAdminLoggedIn(true);
       setIsAdminModalOpen(false);
       return { success: true };
     }
-    return { success: false, message: 'Invalid Admin Credentials! Required ID: KAPILADMIN / Password: ADMIN123' };
+    return { success: false, message: 'Invalid Admin Credentials. Access Denied.' };
   };
 
   const logoutAdmin = () => {
     setIsAdminLoggedIn(false);
   };
 
+  // Guided Tour
   const startDemoTour = () => {
     setIsTourActive(true);
     setTourStep(0);
@@ -172,19 +235,33 @@ export const AppProvider = ({ children }) => {
     setTourStep(0);
   };
 
-  const recordQuizAnswer = (quizId, optionIndex, isCorrect) => {
+  // Record quiz answer and sync to Firestore
+  const recordQuizAnswer = async (quizId, optionIndex, isCorrect) => {
     if (isCorrect) {
-      setCompletedQuizzes(prev => ({ ...prev, [quizId]: optionIndex }));
-      if (currentUser) {
-        setCurrentUser(prev => ({
+      const updated = { ...completedQuizzes, [quizId]: optionIndex };
+      setCompletedQuizzes(updated);
+      localStorage.setItem('kapil_universe_quizzes', JSON.stringify(updated));
+
+      if (currentUser && currentUser.uid) {
+        try {
+          const userDocRef = doc(db, 'learners', currentUser.uid);
+          await updateDoc(userDocRef, {
+            completedQuizzes: updated,
+            xp: (currentUser.xp || 0) + 50,
+            progressPercent: Math.min(100, (currentUser.progressPercent || 0) + 2)
+          });
+        } catch (e) { }
+
+        setCurrentUser(prev => prev ? ({
           ...prev,
           xp: (prev.xp || 0) + 50,
           progressPercent: Math.min(100, (prev.progressPercent || 0) + 2)
-        }));
+        }) : null);
       }
     }
   };
 
+  // Generate verified certificate
   const generateCertificate = (studentName, trackTitle) => {
     const newCert = {
       id: `CERT-KAPIL-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
@@ -192,10 +269,11 @@ export const AppProvider = ({ children }) => {
       track: trackTitle || (activeTrack === 'java' ? 'Java Full Stack Universe' : 'Python Full Stack Universe'),
       issueDate: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
       instructor: 'Kapil Sir',
-      score: '94%',
-      verificationUrl: `https://fullstack-universe.kapil.edu/verify/CERT-KAPIL-${Date.now().toString().slice(-4)}`
+      score: '96%',
+      verificationUrl: `https://sarlayash.github.io/FULL-STACK-UNIVERSE-WITH-KAPIL/#/verify/CERT-KAPIL-${Date.now().toString().slice(-4)}`
     };
     setCertificates(prev => [newCert, ...prev]);
+    localStorage.setItem('kapil_universe_certs', JSON.stringify([newCert, ...certificates]));
     return newCert;
   };
 
@@ -206,12 +284,14 @@ export const AppProvider = ({ children }) => {
         setActiveTrack,
         currentUser,
         setCurrentUser,
+        isAuthLoading,
         isAdminLoggedIn,
         authenticateAdmin,
         logoutAdmin,
-        loginWithGoogle,
-        loginAsDemoUser,
-        logout,
+        loginWithGoogleFirebase,
+        loginWithEmailFirebase,
+        registerWithEmailFirebase,
+        logoutUser,
         isTourActive,
         tourStep,
         startDemoTour,

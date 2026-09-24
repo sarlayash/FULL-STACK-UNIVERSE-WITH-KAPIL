@@ -113,7 +113,7 @@ const MainLayout = () => {
                 className="bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 px-3 py-1.5 rounded-lg text-[11px] flex items-center gap-1.5 transition cursor-pointer"
               >
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Admin Login (KAPILADMIN)</span>
+                <span>Admin Console Login</span>
               </button>
             </div>
           </div>

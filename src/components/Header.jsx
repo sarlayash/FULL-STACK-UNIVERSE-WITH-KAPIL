@@ -22,7 +22,7 @@ export const Header = () => {
     activeTrack, 
     setActiveTrack, 
     currentUser, 
-    logout, 
+    logoutUser, 
     startDemoTour, 
     setIsGoogleModalOpen, 
     setIsAdminModalOpen, 
@@ -66,13 +66,13 @@ export const Header = () => {
           {isAdminLoggedIn ? (
             <div className="flex items-center gap-2">
               <span className="text-emerald-400 font-semibold flex items-center gap-1">
-                <ShieldCheck className="w-3.5 h-3.5" /> KAPILADMIN Active
+                <ShieldCheck className="w-3.5 h-3.5" /> Administrator Active
               </span>
               <button 
                 onClick={logoutAdmin} 
                 className="text-xs text-rose-400 hover:underline"
               >
-                Logout Admin
+                Logout
               </button>
             </div>
           ) : (
@@ -161,7 +161,7 @@ export const Header = () => {
                     </div>
                   </div>
                   <button 
-                    onClick={logout}
+                    onClick={logoutUser}
                     title="Sign Out"
                     className="ml-1 text-slate-400 hover:text-rose-400 transition"
                   >

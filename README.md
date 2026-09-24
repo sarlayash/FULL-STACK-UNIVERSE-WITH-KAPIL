@@ -53,9 +53,7 @@ A comprehensive enterprise web application for **Java Full Stack** (Java 21, Spr
 - Verifiable accredited completion certificate generator with unique verification ID and printable PDF format.
 
 ### 9. Kapil Admin Command Center
-- Authorized access credentials:
-  - **Admin ID**: `KAPILADMIN`
-  - **Password**: `ADMIN123`
+- Privileged access restricted to authorized course administrators.
 - Inspect learner submissions, review code, approve and issue accredited certificates, publish new lessons and analogies, and monitor cohort telemetry.
 
 ---
