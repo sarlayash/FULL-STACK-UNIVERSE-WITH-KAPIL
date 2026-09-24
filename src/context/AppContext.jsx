@@ -14,8 +14,7 @@ import {
   getDoc,
   setDoc,
   updateDoc,
-  serverTimestamp,
-  hasValidCustomApiKey
+  serverTimestamp
 } from '../firebase/config';
 
 const AppContext = createContext(null);
@@ -151,104 +150,99 @@ export const AppProvider = ({ children }) => {
     }
   }, [activeTrack]);
 
-  // Google Sign-In with robust fallback
-  const loginWithGoogleFirebase = async (manualProfile = null) => {
-    if (manualProfile && manualProfile.email) {
+  // Genuine Google OAuth Sign-In via Firebase signInWithPopup
+  const loginWithGoogleFirebase = async () => {
+    if (!auth) {
+      return { success: false, error: 'Firebase Auth is not available. Please verify configuration.' };
+    }
+    try {
+      const result = await signInWithPopup(auth, googleProvider);
+      const firebaseUser = result.user;
+
+      // Sync user profile to Cloud Firestore
+      try {
+        const userDocRef = doc(db, 'learners', firebaseUser.uid);
+        await setDoc(userDocRef, {
+          displayName: firebaseUser.displayName || 'Learner',
+          email: firebaseUser.email,
+          photoURL: firebaseUser.photoURL || '',
+          track: activeTrack,
+          lastLogin: serverTimestamp(),
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+      } catch (firestoreErr) {
+        console.warn('[Firestore] Sync notice:', firestoreErr);
+      }
+
       const userObj = {
-        uid: 'g-' + Date.now(),
-        name: manualProfile.name || manualProfile.email.split('@')[0],
-        email: manualProfile.email,
-        avatar: manualProfile.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(manualProfile.name || manualProfile.email)}`,
+        uid: firebaseUser.uid,
+        name: firebaseUser.displayName || (firebaseUser.email ? firebaseUser.email.split('@')[0] : 'Learner'),
+        email: firebaseUser.email,
+        avatar: firebaseUser.photoURL || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(firebaseUser.displayName || firebaseUser.email || 'Learner')}`,
         track: activeTrack,
         level: 'Level 01',
-        progressPercent: 10,
+        progressPercent: 20,
         streakDays: 1,
         projectsRemaining: 8,
         xp: 150,
         isFirebase: true
       };
+
       setCurrentUser(userObj);
       setIsGoogleModalOpen(false);
       return { success: true, user: userObj };
-    }
-
-    if (hasValidCustomApiKey() && auth) {
-      try {
-        const result = await signInWithPopup(auth, googleProvider);
-        setIsGoogleModalOpen(false);
-        return { success: true, user: result.user };
-      } catch (error) {
-        console.warn('[Firebase popup error]', error);
-        return { success: false, error: error.message, code: error.code };
-      }
-    } else {
-      // Need profile input from Google Auth dialog
-      return { success: false, code: 'NEED_PROFILE_INPUT' };
+    } catch (error) {
+      console.error('[Firebase Google Auth Error]:', error);
+      return { 
+        success: false, 
+        error: error.message, 
+        code: error.code 
+      };
     }
   };
 
-  // Real Email & Password Sign-In
+  // Genuine Email & Password Sign-In
   const loginWithEmailFirebase = async (email, password) => {
-    if (hasValidCustomApiKey() && auth) {
-      try {
-        const userCredential = await signInWithEmailAndPassword(auth, email, password);
-        setIsGoogleModalOpen(false);
-        return { success: true, user: userCredential.user };
-      } catch (error) {
-        return { success: false, error: error.message, code: error.code };
-      }
-    } else {
-      // Direct authenticated learner validation
-      const name = email.split('@')[0];
-      const userObj = {
-        uid: 'user-' + Date.now(),
-        name: name.charAt(0).toUpperCase() + name.slice(1),
-        email: email,
-        avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(email)}`,
-        track: activeTrack,
-        level: 'Level 01',
-        progressPercent: 10,
-        streakDays: 1,
-        projectsRemaining: 8,
-        xp: 100,
-        isFirebase: true
-      };
-      setCurrentUser(userObj);
+    if (!auth) {
+      return { success: false, error: 'Firebase Auth is not initialized.' };
+    }
+    try {
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
       setIsGoogleModalOpen(false);
-      return { success: true, user: userObj };
+      return { success: true, user: userCredential.user };
+    } catch (error) {
+      return { success: false, error: error.message, code: error.code };
     }
   };
 
-  // Real Email & Password Registration
+  // Genuine Email & Password Registration
   const registerWithEmailFirebase = async (email, password, displayName) => {
-    if (hasValidCustomApiKey() && auth) {
-      try {
-        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-        if (displayName) {
+    if (!auth) {
+      return { success: false, error: 'Firebase Auth is not initialized.' };
+    }
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      if (displayName) {
+        try {
           await updateProfile(userCredential.user, { displayName });
-        }
-        setIsGoogleModalOpen(false);
-        return { success: true, user: userCredential.user };
-      } catch (error) {
-        return { success: false, error: error.message, code: error.code };
+        } catch (e) { }
       }
-    } else {
-      const userObj = {
-        uid: 'user-' + Date.now(),
-        name: displayName || email.split('@')[0],
-        email: email,
-        avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(displayName || email)}`,
-        track: activeTrack,
-        level: 'Level 01',
-        progressPercent: 10,
-        streakDays: 1,
-        projectsRemaining: 8,
-        xp: 100,
-        isFirebase: true
-      };
-      setCurrentUser(userObj);
+      try {
+        const userDocRef = doc(db, 'learners', userCredential.user.uid);
+        await setDoc(userDocRef, {
+          displayName: displayName || email.split('@')[0],
+          email: email,
+          track: activeTrack,
+          createdAt: serverTimestamp(),
+          xp: 100,
+          level: 'Level 01'
+        }, { merge: true });
+      } catch (e) { }
+
       setIsGoogleModalOpen(false);
-      return { success: true, user: userObj };
+      return { success: true, user: userCredential.user };
+    } catch (error) {
+      return { success: false, error: error.message, code: error.code };
     }
   };
 
